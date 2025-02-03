@@ -81,7 +81,7 @@ async def query(parameters: dict) -> AsyncGenerator[Item, None]:
             pub_date = convert_to_standard_timezone(entry["pubDate"])
 
             sha1 = hashlib.sha1()
-            author = entry.get("creator", ["unknown"])[0]
+            author = entry["creator"][0] if entry.get("creator") else "anonymous"
             sha1.update(author.encode())
             author_sha1_hex = sha1.hexdigest()
 
