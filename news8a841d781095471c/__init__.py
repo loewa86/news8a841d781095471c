@@ -1,3 +1,4 @@
+from urllib.parse import urlparse
 import aiohttp
 import hashlib
 import logging
@@ -22,6 +23,14 @@ from exorde_data import (
 # Глобальные переменные для хранения состояния
 last_modified: Optional[str] = None
 etag: Optional[str] = None
+
+def is_valid_url(url: str) -> bool:
+    """Проверяет, является ли строка допустимым URL."""
+    try:
+        result = urlparse(url)
+        return all([result.scheme, result.netloc])
+    except ValueError:
+        return False
 
 async def fetch_data(url, headers=None):
     global last_modified, etag
@@ -78,28 +87,42 @@ async def query(parameters: dict) -> AsyncGenerator[Item, None]:
         logging.info(f"[News stream collector] Total entries: {len(data)}")
 
         for entry in data:
-            pub_date = convert_to_standard_timezone(entry["pubDate"])
+            try:
+                # Проверяем наличие обязательных полей
+                if not all(key in entry for key in ["pubDate", "title", "link", "article_id"]):
+                    logging.warning(f"Skipping entry with missing required fields: {entry}")
+                    continue
 
-            sha1 = hashlib.sha1()
-            author = entry["creator"][0] if entry.get("creator") else "anonymous"
-            sha1.update(author.encode())
-            author_sha1_hex = sha1.hexdigest()
+                pub_date = convert_to_standard_timezone(entry["pubDate"])
 
-            content_article_str = entry.get("content") or entry.get("description") or entry["title"]
-            domain_str = entry.get("source_url", entry.get("link", "unknown"))
-            domain_str = tld.extract(domain_str).registered_domain
+                sha1 = hashlib.sha1()
+                author = entry.get("creator", ["unknown"])[0]
+                sha1.update(author.encode())
+                author_sha1_hex = sha1.hexdigest()
 
-            new_item = Item(
-                content=Content(str(content_article_str)),
-                author=Author(str(author_sha1_hex)),
-                created_at=CreatedAt(pub_date),
-                title=Title(entry["title"]),
-                domain=Domain(str(domain_str)),
-                url=Url(entry["link"]),
-                external_id=ExternalId(entry["article_id"])
-            )
+                content_article_str = entry.get("content") or entry.get("description") or entry["title"]
+                domain_str = entry.get("source_url", entry.get("link", "unknown"))
+                domain_str = tld.extract(domain_str).registered_domain
 
-            yield new_item
+                # Проверяем, является ли URL допустимым
+                if not is_valid_url(entry["link"]):
+                    logging.warning(f"Skipping entry with invalid URL: {entry['link']}")
+                    continue
+
+                new_item = Item(
+                    content=Content(str(content_article_str)),
+                    author=Author(str(author_sha1_hex)),
+                    created_at=CreatedAt(pub_date),
+                    title=Title(entry["title"]),
+                    domain=Domain(str(domain_str)),
+                    url=Url(entry["link"]),
+                    external_id=ExternalId(entry["article_id"])
+                )
+
+                yield new_item
+            except Exception as e:
+                logging.error(f"Error processing entry: {e}")
+                continue
 
         logging.info(f"[News stream collector] Done processing {len(data)} entries.")
         await asyncio.sleep(300)  # Проверяем каждые 5 минут
