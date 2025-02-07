@@ -103,12 +103,23 @@ async def query(parameters: dict) -> AsyncGenerator[Item, None]:
                 content_article_str = entry.get("content") or entry.get("description") or entry["title"]
                 domain_str = entry.get("source_url", entry.get("link", "unknown"))
                 domain_str = tld.extract(domain_str).registered_domain
+                
+                content_article_str = ""
+                
+                # if no content (null), then if description is not null, use it as content
+                # else if description is null as well, then use title as content
+                if entry.get("content"):
+                    content_article_str = entry["content"]
+                elif entry.get("description"):
+                    content_article_str = entry["description"]
+                else:
+                    content_article_str = entry["title"]
 
-                # Проверяем, является ли URL допустимым
-                if not is_valid_url(entry["link"]):
-                    logging.warning(f"Skipping entry with invalid URL: {entry['link']}")
-                    continue
-
+                domain_str = entry["source_url"] if entry.get("source_url") else "unknown"
+                # remove the domain using tldextract to have only the domain name
+                # e.g. http://www.example.com -> example.com
+                domain_str = tld.extract(domain_str).registered_domain
+                
                 new_item = Item(
                     content=Content(str(content_article_str)),
                     author=Author(str(author_sha1_hex)),
