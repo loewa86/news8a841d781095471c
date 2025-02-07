@@ -31,6 +31,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Установите уровень логирования для библиотек
+logging.getLogger("aiohttp").setLevel(logging.WARNING)
+logging.getLogger("aiohttp.client").setLevel(logging.WARNING)
+logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
+
+# Локальный логгер
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)  # Явно установите уровень INFO
+
+
 def is_valid_url(url: str) -> bool:
     """Проверяет, является ли строка допустимым URL."""
     try:
